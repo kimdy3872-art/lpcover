@@ -373,6 +373,9 @@ const seekBy = ms => seek(Math.max(0, Math.min(st.duration, nowPos() + ms)));
 const keys = { Space: toggle, ArrowRight: () => seekBy(15000), ArrowLeft: () => seekBy(-15000),
                Escape: closeLib, KeyL: toggleLyrics, Slash: openLib, KeyF: toggleFullscreen };
 window.onkeydown = e => {
+  // ⌃⌘F는 macOS 창 전체화면이라 웹 앱 도구 막대가 남고 Esc로 안 풀린다 → 페이지 전체화면으로 대신 처리
+  // (Safari가 메뉴 단축키로 먼저 가져가면 여기까지 안 옴 → 그땐 F 키)
+  if (e.code === 'KeyF' && e.metaKey && e.ctrlKey && !e.repeat) { e.preventDefault(); toggleFullscreen(); return; }
   if (!keys[e.code] || e.repeat || e.metaKey || e.ctrlKey || e.altKey) return;
   if (e.target.matches('input[type=search]') && e.code !== 'Escape') return;  // 검색창에 타이핑 중 (진행바에 포커스가 있을 땐 단축키 유지)
   if (e.code === 'Space' && e.target.closest('button')) return;
