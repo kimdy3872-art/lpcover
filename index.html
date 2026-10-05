@@ -46,7 +46,15 @@
 
   #disc { cursor: pointer; }
   #ctrl { display: flex; gap: clamp(8px, 3vw, 24px); }
-  #ctrl button { width: 56px; height: 56px; border: 0; border-radius: 50%; background: #fff1; color: #fff; font-size: 1.3rem; cursor: pointer; }
+  #where { margin-top: 2px; font-size: .8rem; opacity: .45; }
+  #devs { background: #0b0b0be6; backdrop-filter: blur(24px); }
+  #devList { display: grid; gap: 8px; width: min(380px, 100vw - 32px); }
+  #devList button { all: unset; display: flex; justify-content: space-between; gap: 16px; padding: 14px 20px; border-radius: 12px; background: #fff1; cursor: pointer; }
+  #devList button:hover { background: #fff2; }
+  #devList button:focus-visible { outline: 2px solid #1ed760; }
+  #devList button[aria-current="true"] { background: #1ed76033; }
+  #devList small { opacity: .6; }
+  #ctrl button { width: min(56px, 12vw); height: min(56px, 12vw); border: 0; border-radius: 50%; background: #fff1; color: #fff; font-size: 1.3rem; cursor: pointer; }
   #ctrl button:hover { background: #fff3; }
   #progress { display: flex; align-items: center; gap: 12px; width: min(calc(var(--s) * 1.4), 90vw);
               font: 12px system-ui; font-variant-numeric: tabular-nums; color: #fffa; }
@@ -99,7 +107,7 @@
   <div id="sleeve"></div>
   <div id="arm"><div id="rod"></div><div id="base"></div></div>
 </div>
-<div id="meta" aria-live="polite"><div id="title">Spotify에서 음악을 재생하세요</div><div id="artist"></div></div>
+<div id="meta" aria-live="polite"><div id="title">Spotify에서 음악을 재생하세요</div><div id="artist"></div><div id="where"></div></div>
 <div id="progress">
   <span id="cur">0:00</span>
   <input id="seek" type="range" min="0" max="0" value="0" step="1" aria-label="재생 위치">
@@ -111,9 +119,11 @@
   <button id="next" aria-label="다음 곡">&#x23ED;&#xFE0E;</button>
   <button id="crate" aria-label="검색·플레이리스트">&#x2630;</button>
   <button id="lyBtn" aria-label="가사 보기" aria-pressed="false">&#x266A;&#xFE0E;</button>
+  <button id="devBtn" aria-label="재생 기기 선택"><svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3A4.5 4.5 0 0 0 14 8v8a4.5 4.5 0 0 0 2.5-4z"/></svg></button>
 </div>
 <div id="lyrics">재생 중인 곡이 없어요</div>
 
+<div id="devs" class="overlay" hidden><div id="devList"></div></div>
 <div id="lib" class="overlay" hidden>
   <button id="libClose" aria-label="닫기">&#x2715;</button>
   <input id="search" type="search" placeholder="노래, 아티스트 검색" aria-label="노래 검색" autocomplete="off">
@@ -131,8 +141,9 @@
 const CLIENT_ID = '2cc29b4d5dd64c0c94cbba2a4f9b2033';  // developer.spotify.com/dashboard 에서 발급받은 Client ID
 const REDIRECT = location.origin + location.pathname.replace(/index\.html$/, '');
 const ARM = { rest: 0, start: 20, end: 40 };  // 톤암 각도(도): 쉬는 위치 / 첫 홈 / 마지막 홈. 레이아웃 바꾸면 여기만 조정
-// streaming·user-read-email·user-read-private = Web Playback SDK 필수, modify = 재생 조작, playlist-* = 플레이리스트 목록
-const SCOPES = 'user-read-currently-playing user-modify-playback-state streaming user-read-email user-read-private playlist-read-private playlist-read-collaborative';
+// streaming·user-read-email·user-read-private = Web Playback SDK 필수, modify = 재생 조작, playlist-* = 플레이리스트 목록,
+// playback-state = 기기 목록·지금 재생 중인 기기
+const SCOPES = 'user-read-currently-playing user-read-playback-state user-modify-playback-state streaming user-read-email user-read-private playlist-read-private playlist-read-collaborative';
 const API = 'https://api.spotify.com/v1';
 
 const $ = id => document.getElementById(id);
@@ -181,10 +192,11 @@ let sdkActive = false;
 async function refresh() {
   if (sdkActive) return;
   try {
-    const r = await api('/me/player/currently-playing');
+    const r = await api('/me/player');  // currently-playing과 같은 내용 + 재생 중인 기기
     if (!r.ok) { if (r.status !== 401) console.warn(r.status, await r.text()); return; }  // 429/5xx: 이전 상태 유지
     const d = r.status === 200 ? await r.json() : null;  // 204 = 재생 중인 것 없음
     apply(d?.item, d?.is_playing, d?.progress_ms);  // ponytail: 광고·팟캐스트는 item이 null → 정지로 표시. 팟캐스트 필요하면 ?additional_types=episode
+    setWhere(d?.device);
   } catch (e) { console.warn(e); }
 }
 
@@ -210,7 +222,7 @@ $('prev').onclick = prev;
 // 누르면 이 턴테이블(없으면 지금 활성 기기)에서 재생
 const lib = $('lib'), grid = $('grid'), searchBox = $('search');
 const closeLib = () => { lib.hidden = true; searchBox.blur(); };  // 숨긴 검색창에 포커스가 남으면 단축키가 막힘
-const playIn = body => { closeLib(); act('/play' + (deviceId ? '?device_id=' + deviceId : ''), 'PUT', body); };
+const playIn = async body => { closeLib(); const id = await targetId(); act('/play' + (id ? '?device_id=' + id : ''), 'PUT', body); };
 
 function tile(img, name, sub, onclick) {
   const b = document.createElement('button');
@@ -262,6 +274,43 @@ const openLib = () => { lib.hidden = false; searchBox.focus(); showPlaylists().c
 $('crate').onclick = openLib;
 $('libClose').onclick = closeLib;
 lib.onclick = e => { if (e.target === lib) closeLib(); };
+
+// 재생 기기: LP(이 페이지, 웹 재생이라 256kbps) 또는 Spotify 앱 등 다른 기기(앱 설정에 따라 무손실).
+// 마지막 선택을 기억해서 시작할 때·곡을 고를 때 그 기기로 보낸다. 앱 기기 id는 재시작마다 바뀔 수 있어 이름으로 기억
+let out = localStorage.out || 'lp';
+const devs = $('devs'), devList = $('devList');
+const closeDevs = () => { devs.hidden = true; };
+const devices = async () => { const r = await api('/me/player/devices'); return r.ok ? (await r.json()).devices.filter(d => !d.is_restricted) : []; };
+const targetId = async () => out === 'lp' ? deviceId : (await devices()).find(d => d.name === out)?.id;
+const setWhere = dev => { $('where').textContent = dev ? `${dev.id === deviceId ? '이 페이지' : dev.name}에서 재생 중` : ''; };
+const KIND = { Computer: 'Spotify 앱 · 무손실 가능', Smartphone: '폰', Tablet: '태블릿', Speaker: '스피커', TV: 'TV', CastVideo: 'Cast', Automobile: '차량' };
+
+async function openDevs() {
+  devs.hidden = false;
+  devList.textContent = '기기 찾는 중…';
+  const list = await devices();
+  if (!list.length) { devList.textContent = '기기가 없어요. Spotify 앱을 열어 주세요'; return; }
+  devList.replaceChildren(...list.map(d => {
+    const b = document.createElement('button');
+    b.innerHTML = '<span></span><small></small>';
+    b.children[0].textContent = d.name;  // 기기 이름은 사용자가 정한 값이라 textContent
+    b.children[1].textContent = d.id === deviceId ? '이 페이지 · 256kbps' : KIND[d.type] ?? d.type;
+    b.setAttribute('aria-current', d.is_active);
+    b.onclick = () => pickDevice(d);
+    return b;
+  }));
+  devList.querySelector('button')?.focus();
+}
+
+async function pickDevice(d) {
+  closeDevs();
+  out = d.id === deviceId ? 'lp' : d.name;
+  localStorage.out = out;
+  await api('/me/player', 'PUT', { device_ids: [d.id] }).catch(console.warn);  // play 생략 = 재생/정지 상태 유지
+  setTimeout(refresh, 800);
+}
+$('devBtn').onclick = () => openDevs().catch(e => { devList.textContent = '기기를 불러오지 못했어요'; console.warn(e); });
+devs.onclick = e => { if (e.target === devs) closeDevs(); };
 
 // 가사: Spotify API엔 가사가 없어서 LRCLIB(무료 공개 가사 DB, 키 불필요)에서 가져온다
 const lyricsBox = $('lyrics');
@@ -371,7 +420,7 @@ if (localStorage.ly) toggleLyrics();
 // SDK의 enableMediaSession 핸들러가 받는다 → 페이지 코드 불필요
 const seekBy = ms => seek(Math.max(0, Math.min(st.duration, nowPos() + ms)));
 const keys = { Space: toggle, ArrowRight: () => seekBy(15000), ArrowLeft: () => seekBy(-15000),
-               Escape: closeLib, KeyL: toggleLyrics, Slash: openLib, KeyF: toggleFullscreen };
+               Escape: () => { closeLib(); closeDevs(); }, KeyL: toggleLyrics, Slash: openLib, KeyF: toggleFullscreen };
 window.onkeydown = e => {
   // ⌃⌘F는 macOS 창 전체화면이라 웹 앱 도구 막대가 남고 Esc로 안 풀린다 → 페이지 전체화면으로 대신 처리
   // (Safari가 메뉴 단축키로 먼저 가져가면 여기까지 안 옴 → 그땐 F 키)
@@ -384,15 +433,20 @@ window.onkeydown = e => {
 
 // Web Playback SDK: 페이지를 Spotify Connect 기기 "LP Cover"로 등록
 let player, deviceId, started = false;
-const transfer = () => started && deviceId && api('/me/player', 'PUT', { device_ids: [deviceId] }).catch(console.warn);  // play 생략 = 재생 중이던 상태 유지
+// 시작할 때 마지막으로 고른 기기로 재생을 넘긴다. play 생략 = 재생 중이던 상태 유지
+const transfer = async () => {
+  if (!started) return;
+  const id = await targetId().catch(() => null);
+  if (id) api('/me/player', 'PUT', { device_ids: [id] }).catch(console.warn);
+};
 window.onSpotifyWebPlaybackSDKReady = () => {
   // enableMediaSession: SDK iframe이 곡 정보·커버·조작 핸들러를 OS Now Playing에 넘김
   // (끄면 macOS·노치 앱에 iframe 제목 "Spotify Embedded Player"만 보임)
   player = new Spotify.Player({ name: 'LP Cover', enableMediaSession: true, getOAuthToken: async cb => { await fresh(); cb(tok.access); } });
-  player.addListener('ready', e => { deviceId = e.device_id; transfer(); });
+  player.addListener('ready', e => { deviceId = e.device_id; if (out === 'lp') transfer(); });  // 앱 모드면 시작 버튼에서 이미 넘김
   player.addListener('player_state_changed', s => {
     sdkActive = !!s;  // null = 다른 기기로 넘어감 → 폴링 재개
-    if (s) apply(s.track_window.current_track, !s.paused, s.position);
+    if (s) { apply(s.track_window.current_track, !s.paused, s.position); setWhere({ id: deviceId }); }
   });
   // 지원 안 되는 브라우저(모바일 등)·Premium 아님 → 리모컨 모드로 계속 동작
   for (const ev of ['initialization_error', 'authentication_error', 'account_error', 'playback_error', 'autoplay_failed'])
