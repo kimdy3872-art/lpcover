@@ -198,7 +198,9 @@ function setPlaying(v) { st.playing = v; $('play').innerHTML = v ? '&#x275A;&#x2
 
 // 조작은 Web API로: SDK 기기든 폰·데스크톱 앱이든 지금 활성 기기에 적용됨
 const act = (path, method, body) => api('/me/player' + path, method, body).then(() => setTimeout(refresh, 500)).catch(console.warn);
-const toggle = () => { setPlaying(!st.playing); act(st.playing ? '/play' : '/pause', 'PUT'); };  // 판이 즉시 반응하게 먼저 반영
+const nowPos = () => st.progress + (st.playing ? performance.now() - st.at : 0);  // 마지막 보고 이후 흐른 시간까지 보간한 위치
+// 판이 즉시 반응하게 먼저 반영. 위치를 지금 값으로 고정해야 일시정지 때 진행바가 뒤로 튀지 않는다
+const toggle = () => { Object.assign(st, { progress: nowPos(), at: performance.now() }); setPlaying(!st.playing); act(st.playing ? '/play' : '/pause', 'PUT'); };
 const next = () => act('/next', 'POST');
 const prev = () => act('/previous', 'POST');
 disc.onclick = $('play').onclick = toggle;
@@ -365,7 +367,11 @@ $('lyBtn').onclick = toggleLyrics;
 if (localStorage.ly) toggleLyrics();
 
 // 키는 e.code로: 한글 입력 상태에서도 L·/ 가 동작
-const keys = { Space: toggle, ArrowRight: next, ArrowLeft: prev, Escape: closeLib, KeyL: toggleLyrics, Slash: openLib, KeyF: toggleFullscreen };
+// 이전·다음 곡은 키보드 미디어 키(F7·F9)로: macOS가 Now Playing 앱(Safari)에 보내고,
+// SDK의 enableMediaSession 핸들러가 받는다 → 페이지 코드 불필요
+const seekBy = ms => seek(Math.max(0, Math.min(st.duration, nowPos() + ms)));
+const keys = { Space: toggle, ArrowRight: () => seekBy(15000), ArrowLeft: () => seekBy(-15000),
+               Escape: closeLib, KeyL: toggleLyrics, Slash: openLib, KeyF: toggleFullscreen };
 window.onkeydown = e => {
   if (!keys[e.code] || e.repeat || e.metaKey || e.ctrlKey || e.altKey) return;
   if (e.target.matches('input[type=search]') && e.code !== 'Escape') return;  // 검색창에 타이핑 중 (진행바에 포커스가 있을 땐 단축키 유지)
