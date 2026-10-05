@@ -1,0 +1,282 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LP Cover</title>
+<style>
+  :root { --s: min((100vw - 32px) / 1.86, 62vh); }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  body { margin: 0; min-height: 100vh; display: grid; place-content: center; justify-items: center; gap: 32px;
+         background: #0b0b0b; color: #eee; font: 16px/1.4 system-ui, sans-serif; overflow: hidden; }
+  #bg { position: fixed; inset: -10%; z-index: -1; background: center/cover; filter: blur(60px) brightness(.4) saturate(1.4); }
+
+  #stage { position: relative; width: calc(var(--s) * 1.86); height: var(--s); }
+  #sleeve { position: absolute; left: 0; top: 0; width: var(--s); height: var(--s); z-index: 2;
+            background: #1a1a1a center/cover; border-radius: 3px; box-shadow: 0 20px 50px #0009; }
+
+  #disc { position: absolute; left: calc(var(--s) * .03); top: calc(var(--s) * .03); z-index: 1;
+          width: calc(var(--s) * .94); height: calc(var(--s) * .94); border-radius: 50%; box-shadow: 0 12px 40px #000a;
+          transform: translateX(calc(var(--s) * .7)); transition: transform .8s cubic-bezier(.6, 0, .3, 1); }
+  #disc.in { transform: none; }
+  #spin { position: absolute; inset: 0; border-radius: 50%; will-change: transform;
+          background:
+            radial-gradient(circle closest-side, #0d0d0d 0 22%, #0000 22% 96%, #0d0d0d 96%),
+            repeating-radial-gradient(circle closest-side, #131313 0 .6%, #1e1e1e .6% 1.2%); }
+  #label { position: absolute; inset: 0; margin: auto; width: 36%; height: 36%; border-radius: 50%; background: #333 center/cover; }
+  #label::after { content: ''; position: absolute; inset: 0; margin: auto; width: 8%; height: 8%; border-radius: 50%; background: #0b0b0b; }
+  /* 반사광은 회전하지 않는다: 판만 돌고 빛은 고정이라 진짜 비닐처럼 보임 */
+  #shine { position: absolute; inset: 0; border-radius: 50%; pointer-events: none;
+           background: conic-gradient(from 20deg, #0000 0 6%, #fff2 12%, #0000 18% 56%, #fff1 62%, #0000 68%);
+           mask: radial-gradient(circle closest-side, #0000 18%, #000 18.5%); }
+
+  /* 톤암: #arm은 0×0 크기로 피벗 위치에 놓여서 rotate()가 피벗 기준으로 돈다 */
+  #arm { position: absolute; left: calc(var(--s) * 1.764); top: calc(var(--s) * .105); z-index: 3; }
+  #rod { position: absolute; left: calc(var(--s) * -.012); width: calc(var(--s) * .024); height: calc(var(--s) * .752);
+         border-radius: 99px; background: linear-gradient(90deg, #777, #eee 40%, #888); box-shadow: 6px 8px 12px #0007; }
+  #rod::after { content: ''; position: absolute; left: 50%; bottom: calc(var(--s) * -.03); transform: translateX(-50%);
+                width: calc(var(--s) * .05); height: calc(var(--s) * .1); border-radius: 3px; background: #2b2b2b; }
+  #base { position: absolute; left: calc(var(--s) * -.07); top: calc(var(--s) * -.07); width: calc(var(--s) * .14); height: calc(var(--s) * .14);
+          border-radius: 50%; background: radial-gradient(circle, #ddd 0 18%, #444 20% 30%, #262626 32%); box-shadow: 0 6px 16px #0009; }
+
+  #meta { text-align: center; max-width: 90vw; }
+  #title { font-size: 1.4rem; font-weight: 600; }
+  #artist { opacity: .7; }
+
+  #disc { cursor: pointer; }
+  #ctrl { display: flex; gap: 24px; }
+  #ctrl button { width: 56px; height: 56px; border: 0; border-radius: 50%; background: #fff1; color: #fff; font-size: 1.3rem; cursor: pointer; }
+  #ctrl button:hover { background: #fff3; }
+
+  #lib { overflow-y: auto; place-content: start center; padding: 56px 16px; background: #0b0b0be6; backdrop-filter: blur(24px); }
+  #grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 24px 20px; width: min(1100px, 100vw - 32px); }
+  #lib button { all: unset; cursor: pointer; }
+  #lib button:focus-visible { outline: 2px solid #1ed760; outline-offset: 4px; }
+  .pl div { aspect-ratio: 1; border-radius: 3px; background: #222 center/cover; box-shadow: 0 10px 30px #0008; transition: transform .2s; }
+  .pl:hover div { transform: translateY(-4px); }
+  .pl span { display: block; margin-top: 8px; font-size: .9rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #libClose { position: fixed; top: 16px; right: 24px; font-size: 1.6rem; }
+
+  .overlay { position: fixed; inset: 0; z-index: 9; display: grid; place-content: center; gap: 16px; text-align: center; background: #0b0b0bcc; }
+  .overlay button { padding: 14px 28px; border: 0; border-radius: 99px; background: #1ed760; color: #000; font: 600 1rem system-ui; cursor: pointer; }
+  .overlay button:disabled { opacity: .4; cursor: default; }
+  code { opacity: .7; }
+</style>
+</head>
+<body>
+<div id="bg"></div>
+<div id="stage" aria-hidden="true">
+  <div id="disc" class="in"><div id="spin"><div id="label"></div></div><div id="shine"></div></div>
+  <div id="sleeve"></div>
+  <div id="arm"><div id="rod"></div><div id="base"></div></div>
+</div>
+<div id="meta" aria-live="polite"><div id="title">Spotify에서 음악을 재생하세요</div><div id="artist"></div></div>
+<div id="ctrl">
+  <button id="prev" aria-label="이전 곡">&#x23EE;&#xFE0E;</button>
+  <button id="play" aria-label="재생/일시정지">&#x25B6;&#xFE0E;</button>
+  <button id="next" aria-label="다음 곡">&#x23ED;&#xFE0E;</button>
+  <button id="crate" aria-label="플레이리스트 고르기">&#x2630;</button>
+</div>
+
+<div id="lib" class="overlay" hidden>
+  <button id="libClose" aria-label="닫기">&#x2715;</button>
+  <div id="grid"></div>
+</div>
+
+<div id="start" class="overlay" hidden><button id="startBtn">&#x25B6;&#xFE0E; 턴테이블 켜기</button></div>
+<div id="login" class="overlay" hidden>
+  <button id="loginBtn">Spotify로 로그인</button>
+  <p id="noid" hidden>index.html 상단의 <b>CLIENT_ID</b>를 먼저 채워주세요</p>
+  <p>Dashboard에 등록할 Redirect URI<br><code id="uri"></code></p>
+</div>
+
+<script type="module">
+const CLIENT_ID = '2cc29b4d5dd64c0c94cbba2a4f9b2033';  // developer.spotify.com/dashboard 에서 발급받은 Client ID
+const REDIRECT = location.origin + location.pathname.replace(/index\.html$/, '');
+const ARM = { rest: 0, start: 20, end: 40 };  // 톤암 각도(도): 쉬는 위치 / 첫 홈 / 마지막 홈. 레이아웃 바꾸면 여기만 조정
+// streaming·user-read-email·user-read-private = Web Playback SDK 필수, modify = 재생 조작, playlist-* = 플레이리스트 목록
+const SCOPES = 'user-read-currently-playing user-modify-playback-state streaming user-read-email user-read-private playlist-read-private playlist-read-collaborative';
+const API = 'https://api.spotify.com/v1';
+
+const $ = id => document.getElementById(id);
+const [disc, spin, arm, sleeve, label, bg] = ['disc', 'spin', 'arm', 'sleeve', 'label', 'bg'].map($);
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const b64url = bytes => btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+
+let tok = JSON.parse(localStorage.lp || 'null');
+const st = { uri: null, playing: false, swapping: false, progress: 0, duration: 1, at: 0 };
+
+async function login() {
+  const verifier = b64url(crypto.getRandomValues(new Uint8Array(32)));
+  sessionStorage.verifier = verifier;
+  const challenge = b64url(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier))));
+  location.href = 'https://accounts.spotify.com/authorize?' + new URLSearchParams({
+    client_id: CLIENT_ID, response_type: 'code', redirect_uri: REDIRECT,
+    scope: SCOPES, code_challenge_method: 'S256', code_challenge: challenge,
+  });
+}
+
+async function token(params) {
+  const r = await fetch('https://accounts.spotify.com/api/token', { method: 'POST', body: new URLSearchParams({ client_id: CLIENT_ID, ...params }) });
+  const j = await r.json();
+  if (!r.ok) { localStorage.removeItem('lp'); location.replace(REDIRECT); throw new Error(j.error_description || j.error); }
+  tok = { access: j.access_token, refresh: j.refresh_token || tok?.refresh, scope: j.scope || tok?.scope, exp: Date.now() + (j.expires_in - 60) * 1000 };
+  localStorage.lp = JSON.stringify(tok);
+}
+
+// 갱신은 동시에 한 번만: refresh token이 교체될 수 있어서 중복 갱신하면 로그아웃됨
+let refreshing = null;
+const fresh = () => Date.now() < tok.exp ? null
+  : (refreshing ??= token({ grant_type: 'refresh_token', refresh_token: tok.refresh }).finally(() => refreshing = null));
+
+async function api(path, method = 'GET', body) {
+  await fresh();
+  const r = await fetch(API + path, {
+    method, body: body && JSON.stringify(body),
+    headers: { Authorization: 'Bearer ' + tok.access, 'Content-Type': 'application/json' },
+  });
+  if (r.status === 401) tok.exp = 0;
+  return r;
+}
+
+// 이 페이지(SDK)가 재생 기기면 SDK 이벤트로, 아니면 폴링으로 상태를 받는다
+let sdkActive = false;
+async function refresh() {
+  if (sdkActive) return;
+  try {
+    const r = await api('/me/player/currently-playing');
+    if (!r.ok) { if (r.status !== 401) console.warn(r.status, await r.text()); return; }  // 429/5xx: 이전 상태 유지
+    const d = r.status === 200 ? await r.json() : null;  // 204 = 재생 중인 것 없음
+    apply(d?.item, d?.is_playing, d?.progress_ms);  // ponytail: 광고·팟캐스트는 item이 null → 정지로 표시. 팟캐스트 필요하면 ?additional_types=episode
+  } catch (e) { console.warn(e); }
+}
+
+function apply(t, playing, progress) {
+  if (t && t.uri !== st.uri) setTrack(t);
+  setPlaying(!!(t && playing));
+  if (t) Object.assign(st, { progress, duration: t.duration_ms, at: performance.now() });
+}
+
+function setPlaying(v) { st.playing = v; $('play').innerHTML = v ? '&#x275A;&#x275A;' : '&#x25B6;&#xFE0E;'; }
+
+// 조작은 Web API로: SDK 기기든 폰·데스크톱 앱이든 지금 활성 기기에 적용됨
+const act = (path, method, body) => api('/me/player' + path, method, body).then(() => setTimeout(refresh, 500)).catch(console.warn);
+const toggle = () => { setPlaying(!st.playing); act(st.playing ? '/play' : '/pause', 'PUT'); };  // 판이 즉시 반응하게 먼저 반영
+const next = () => act('/next', 'POST');
+const prev = () => act('/previous', 'POST');
+disc.onclick = $('play').onclick = toggle;
+$('next').onclick = next;
+$('prev').onclick = prev;
+// 플레이리스트 고르기: 내 플레이리스트를 앨범처럼 늘어놓고, 누르면 이 턴테이블(없으면 지금 활성 기기)에서 재생
+const lib = $('lib'), grid = $('grid');
+const closeLib = () => { lib.hidden = true; };
+async function openLib() {
+  lib.hidden = false;
+  if (grid.childElementCount) return;  // 한 번 불러온 목록 재사용
+  grid.textContent = '불러오는 중…';
+  const items = [];
+  for (let url = '/me/playlists?limit=50'; url; ) {
+    const r = await api(url);
+    if (!r.ok) { grid.textContent = `플레이리스트를 불러오지 못했어요 (${r.status})`; return; }
+    const j = await r.json();
+    items.push(...j.items.filter(Boolean));
+    url = j.next?.replace(API, '');
+  }
+  if (!items.length) { grid.textContent = '플레이리스트가 없어요'; return; }
+  grid.replaceChildren(...items.map(p => {
+    const b = document.createElement('button');
+    b.className = 'pl';
+    b.innerHTML = '<div></div><span></span>';
+    const img = p.images?.[0]?.url;
+    if (img) b.firstChild.style.backgroundImage = `url("${img}")`;
+    b.lastChild.textContent = p.name;
+    b.onclick = () => { closeLib(); act('/play' + (deviceId ? '?device_id=' + deviceId : ''), 'PUT', { context_uri: p.uri }); };
+    return b;
+  }));
+}
+$('crate').onclick = () => openLib().catch(e => { grid.textContent = '플레이리스트를 불러오지 못했어요'; console.warn(e); });
+$('libClose').onclick = closeLib;
+lib.onclick = e => { if (e.target === lib) closeLib(); };
+
+const keys = { ' ': toggle, ArrowRight: next, ArrowLeft: prev, Escape: closeLib };
+window.onkeydown = e => {
+  if (!keys[e.key] || e.repeat || (e.key === ' ' && e.target.closest('button'))) return;
+  e.preventDefault(); keys[e.key]();
+};
+
+// Web Playback SDK: 페이지를 Spotify Connect 기기 "LP Cover"로 등록
+let player, deviceId, started = false;
+const transfer = () => started && deviceId && api('/me/player', 'PUT', { device_ids: [deviceId] }).catch(console.warn);  // play 생략 = 재생 중이던 상태 유지
+window.onSpotifyWebPlaybackSDKReady = () => {
+  player = new Spotify.Player({ name: 'LP Cover', getOAuthToken: async cb => { await fresh(); cb(tok.access); } });
+  player.addListener('ready', e => { deviceId = e.device_id; transfer(); });
+  player.addListener('player_state_changed', s => {
+    sdkActive = !!s;  // null = 다른 기기로 넘어감 → 폴링 재개
+    if (s) apply(s.track_window.current_track, !s.paused, s.position);
+  });
+  // 지원 안 되는 브라우저(모바일 등)·Premium 아님 → 리모컨 모드로 계속 동작
+  for (const ev of ['initialization_error', 'authentication_error', 'account_error', 'playback_error', 'autoplay_failed'])
+    player.addListener(ev, x => console.warn('[LP SDK]', ev, x?.message ?? ''));
+  player.connect();
+};
+
+// 소리 재생·전체화면·화면 꺼짐 방지는 모두 사용자 탭이 있어야 허용됨
+$('startBtn').onclick = () => {
+  started = true; $('start').hidden = true;
+  player?.activateElement();
+  document.documentElement.requestFullscreen?.().catch(() => {});
+  navigator.wakeLock?.request('screen').catch(() => {});  // ponytail: 탭이 가려지면 풀림. 다시 잡으려면 visibilitychange에서 재요청
+  transfer();
+};
+
+// 곡 변경: 판을 슬리브에 넣고 → 새 커버로 교체 → 다시 꺼냄
+let seq = 0;
+async function setTrack(t) {
+  const my = ++seq;
+  st.uri = t.uri; st.swapping = true; disc.classList.add('in');
+  const art = [...t.album.images].sort((a, b) => (b.width || 0) - (a.width || 0))[0]?.url;  // 가장 큰 커버. SDK는 순서 보장 안 함, 로컬 파일은 커버 없음
+  const img = new Image();
+  if (art) img.src = art;
+  await Promise.all([art && img.decode().catch(() => {}), sleep(800)]);
+  if (my !== seq) return;  // 빠르게 넘긴 경우 마지막 곡만 반영
+  for (const el of [sleeve, label, bg]) el.style.backgroundImage = art ? `url("${art}")` : '';
+  $('title').textContent = t.name;
+  $('artist').textContent = t.artists.map(a => a.name).join(', ');
+  disc.classList.remove('in'); st.swapping = false;
+}
+
+let angle = 0, rate = 0, armDeg = ARM.rest, last = performance.now();
+function frame(now) {
+  const dt = Math.min(now - last, 100); last = now;
+  const on = st.playing && !st.swapping;
+  rate += ((on ? 1 : 0) - rate) * Math.min(1, dt / 600);  // 턴테이블 가감속
+  angle = (angle + rate * dt * 0.2) % 360;                 // 33⅓ RPM = 1.8초/회전 = 0.2°/ms
+  const p = Math.min(1, (st.progress + (st.playing ? now - st.at : 0)) / st.duration);  // 폴링 사이 진행도 보간
+  armDeg += ((on ? ARM.start + p * (ARM.end - ARM.start) : ARM.rest) - armDeg) * Math.min(1, dt / 300);
+  spin.style.transform = `rotate(${angle}deg)`;
+  arm.style.transform = `rotate(${armDeg}deg)`;
+  requestAnimationFrame(frame);
+}
+
+const q = new URLSearchParams(location.search);
+if (q.has('code') || q.has('error')) {
+  history.replaceState(null, '', REDIRECT);
+  if (q.has('code')) await token({ grant_type: 'authorization_code', code: q.get('code'), redirect_uri: REDIRECT, code_verifier: sessionStorage.verifier });
+}
+if (tok && SCOPES.split(' ').some(s => !tok.scope?.split(' ').includes(s))) tok = null;  // 권한이 추가됐으면 다시 로그인
+if (tok) {
+  refresh(); setInterval(refresh, 2000);
+  requestAnimationFrame(frame);
+  $('start').hidden = false;
+  document.head.append(Object.assign(document.createElement('script'), { src: 'https://sdk.scdn.co/spotify-player.js' }));
+} else {
+  $('login').hidden = false;
+  $('uri').textContent = REDIRECT;
+  $('noid').hidden = !!CLIENT_ID;
+  $('loginBtn').disabled = !CLIENT_ID;
+  $('loginBtn').onclick = login;
+}
+</script>
+</body>
+</html>
