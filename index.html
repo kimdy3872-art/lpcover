@@ -209,7 +209,9 @@ window.onkeydown = e => {
 let player, deviceId, started = false;
 const transfer = () => started && deviceId && api('/me/player', 'PUT', { device_ids: [deviceId] }).catch(console.warn);  // play 생략 = 재생 중이던 상태 유지
 window.onSpotifyWebPlaybackSDKReady = () => {
-  player = new Spotify.Player({ name: 'LP Cover', getOAuthToken: async cb => { await fresh(); cb(tok.access); } });
+  // enableMediaSession: SDK iframe이 곡 정보·커버·조작 핸들러를 OS Now Playing에 넘김
+  // (끄면 macOS·노치 앱에 iframe 제목 "Spotify Embedded Player"만 보임)
+  player = new Spotify.Player({ name: 'LP Cover', enableMediaSession: true, getOAuthToken: async cb => { await fresh(); cb(tok.access); } });
   player.addListener('ready', e => { deviceId = e.device_id; transfer(); });
   player.addListener('player_state_changed', s => {
     sdkActive = !!s;  // null = 다른 기기로 넘어감 → 폴링 재개
