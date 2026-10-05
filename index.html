@@ -412,10 +412,11 @@ async function setTrack(t) {
   const my = ++seq;
   st.uri = t.uri; st.swapping = true; disc.classList.add('in');
   loadLyrics(t);
-  const art = [...t.album.images].sort((a, b) => (b.width || 0) - (a.width || 0))[0]?.url;  // 가장 큰 커버. SDK는 순서 보장 안 함, 로컬 파일은 커버 없음
-  const img = new Image();
-  if (art) img.src = art;
-  await Promise.all([art && img.decode().catch(() => {}), sleep(800)]);
+  const art640 = [...t.album.images].sort((a, b) => (b.width || 0) - (a.width || 0))[0]?.url;  // API 최대 640px. SDK는 순서 보장 안 함, 로컬 파일은 커버 없음
+  // 비공식: Spotify CDN은 크기 키(b273=640)를 82c1로 바꾸면 원본(보통 1400~3000px)을 준다. 안 열리면 640 그대로
+  const hi = art640?.replace('ab67616d0000b273', 'ab67616d000082c1');
+  const decodes = src => { const i = new Image(); i.src = src; return i.decode().then(() => true, () => false); };
+  const [art] = await Promise.all([art640 && decodes(hi).then(ok => ok ? hi : art640), sleep(800)]);
   if (my !== seq) return;  // 빠르게 넘긴 경우 마지막 곡만 반영
   for (const el of [sleeve, label, bg]) el.style.backgroundImage = art ? `url("${art}")` : '';
   $('title').textContent = t.name;
