@@ -48,6 +48,15 @@
   #ctrl { display: flex; gap: clamp(8px, 3vw, 24px); }
   #ctrl button { width: 56px; height: 56px; border: 0; border-radius: 50%; background: #fff1; color: #fff; font-size: 1.3rem; cursor: pointer; }
   #ctrl button:hover { background: #fff3; }
+  #progress { display: flex; align-items: center; gap: 12px; width: min(calc(var(--s) * 1.4), 90vw);
+              font: 12px system-ui; font-variant-numeric: tabular-nums; color: #fffa; }
+  #progress span { min-width: 4ch; }
+  #left { text-align: right; }
+  #seek { flex: 1; height: 4px; margin: 0; -webkit-appearance: none; appearance: none; border-radius: 2px; cursor: pointer;
+          background: linear-gradient(#fff, #fff) 0 / var(--p, 0%) 100% no-repeat, #fff3; }
+  #seek:focus-visible { outline: 2px solid #fff5; outline-offset: 6px; }
+  #seek::-webkit-slider-thumb { -webkit-appearance: none; width: 12px; height: 12px; border-radius: 50%; background: #fff; }
+  #seek::-moz-range-thumb { width: 12px; height: 12px; border: 0; border-radius: 50%; background: #fff; }
 
   #lib { overflow-y: auto; place-content: start center; padding: 56px 16px; background: #0b0b0be6; backdrop-filter: blur(24px); }
   #grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 24px 20px; width: min(1100px, 100vw - 32px); }
@@ -70,7 +79,7 @@
   #lyrics.plain { padding-block: 10vh; }
   #lyrics.plain p { opacity: .9; font-size: 1.1rem; font-weight: 500; cursor: auto; }
   body.ly { --s: min((58vw - 48px) / 1.86, 62vh); grid-template-columns: auto auto; column-gap: 4vw; }
-  body.ly #lyrics { display: block; grid-column: 2; grid-row: 1 / 4; align-self: center; }
+  body.ly #lyrics { display: block; grid-column: 2; grid-row: 1 / 5; align-self: center; }
   @media (max-width: 800px) {
     body.ly { grid-template-columns: auto; }
     body.ly #stage { display: none; }
@@ -91,6 +100,11 @@
   <div id="arm"><div id="rod"></div><div id="base"></div></div>
 </div>
 <div id="meta" aria-live="polite"><div id="title">Spotify에서 음악을 재생하세요</div><div id="artist"></div></div>
+<div id="progress">
+  <span id="cur">0:00</span>
+  <input id="seek" type="range" min="0" max="0" value="0" step="1" aria-label="재생 위치">
+  <span id="left">-0:00</span>
+</div>
 <div id="ctrl">
   <button id="prev" aria-label="이전 곡">&#x23EE;&#xFE0E;</button>
   <button id="play" aria-label="재생/일시정지">&#x25B6;&#xFE0E;</button>
@@ -318,6 +332,29 @@ function showLyricLine(pos) {  // 프레임마다 호출, 줄이 바뀔 때만 D
 
 const seek = ms => { Object.assign(st, { progress: ms, at: performance.now() }); act('/seek?position_ms=' + Math.round(ms), 'PUT'); };  // 톤암·가사가 즉시 따라오게 먼저 반영
 
+// 진행바: 네이티브 range. 드래그 중(:active)엔 손 위치를 우선하고, 놓으면 그 위치로 seek
+const seekBar = $('seek');
+const fmt = ms => { const s = Math.max(0, Math.round(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
+function paintProgress(pos) {
+  seekBar.style.setProperty('--p', `${Math.min(100, pos / st.duration * 100)}%`);
+  $('cur').textContent = fmt(pos);
+  $('left').textContent = '-' + fmt(st.duration - pos);
+}
+let shownProgress = '';
+function showProgress(pos) {  // 프레임마다 호출, 초가 바뀔 때만 DOM을 건드림
+  const key = Math.floor(pos / 1000) + '/' + st.duration;
+  if (key === shownProgress || seekBar.matches(':active')) return;
+  shownProgress = key;
+  seekBar.max = Math.round(st.duration / 1000);
+  seekBar.value = Math.floor(pos / 1000);
+  paintProgress(pos);
+}
+seekBar.oninput = () => paintProgress(seekBar.value * 1000);  // 드래그 중 시간 미리보기
+seekBar.onchange = () => seek(seekBar.value * 1000);
+
+const toggleFullscreen = () => document.fullscreenElement ? document.exitFullscreen()
+  : document.documentElement.requestFullscreen?.().catch(() => {});
+
 const toggleLyrics = () => {
   const on = document.body.classList.toggle('ly');
   $('lyBtn').setAttribute('aria-pressed', on);
@@ -328,10 +365,10 @@ $('lyBtn').onclick = toggleLyrics;
 if (localStorage.ly) toggleLyrics();
 
 // 키는 e.code로: 한글 입력 상태에서도 L·/ 가 동작
-const keys = { Space: toggle, ArrowRight: next, ArrowLeft: prev, Escape: closeLib, KeyL: toggleLyrics, Slash: openLib };
+const keys = { Space: toggle, ArrowRight: next, ArrowLeft: prev, Escape: closeLib, KeyL: toggleLyrics, Slash: openLib, KeyF: toggleFullscreen };
 window.onkeydown = e => {
   if (!keys[e.code] || e.repeat || e.metaKey || e.ctrlKey || e.altKey) return;
-  if (e.target.closest('input') && e.code !== 'Escape') return;  // 검색창에 타이핑 중
+  if (e.target.matches('input[type=search]') && e.code !== 'Escape') return;  // 검색창에 타이핑 중 (진행바에 포커스가 있을 땐 단축키 유지)
   if (e.code === 'Space' && e.target.closest('button')) return;
   e.preventDefault(); keys[e.code]();
 };
@@ -389,6 +426,7 @@ function frame(now) {
   const pos = st.progress + (st.playing ? now - st.at : 0);  // 폴링 사이 진행도 보간
   const p = Math.min(1, pos / st.duration);
   if (lyr.lines.length) showLyricLine(pos);
+  showProgress(Math.min(pos, st.duration));
   armDeg += ((on ? ARM.start + p * (ARM.end - ARM.start) : ARM.rest) - armDeg) * Math.min(1, dt / 300);
   spin.style.transform = `rotate(${angle}deg)`;
   arm.style.transform = `rotate(${armDeg}deg)`;
