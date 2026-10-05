@@ -260,21 +260,38 @@ function parseLrc(lrc) {  // "[01:02.50][02:10.00]가사" → [{ t: ms, text }],
   return lines.sort((a, b) => a.t - b.t);
 }
 
+// 꼬리표 제거: "곡 [Live] (feat. X) - Remastered 2011" → "곡"
+const cleanTitle = s => s.replace(/\s+-\s+.*$/, '').replace(/\s*[([][^)\]]*[)\]]/g, '').trim();
+
+// 원제목 → 정리한 제목 → 자유 검색 순으로, 싱크 가사가 나오면 바로 멈춤
+async function findLyrics(t) {
+  const artist = t.artists[0]?.name ?? '';
+  const title = cleanTitle(t.name) || t.name;
+  const tries = [{ track_name: t.name, artist_name: artist }];
+  if (title !== t.name) tries.push({ track_name: title, artist_name: artist });
+  tries.push({ q: `${title} ${artist}` });
+  const gap = x => Math.abs(x.duration - t.duration_ms / 1000);
+  let plain;
+  for (const params of tries) {
+    const res = await (await fetch('https://lrclib.net/api/search?' + new URLSearchParams(params))).json();
+    // 싱크 가사는 길이가 거의 같은 버전만 (다른 버전이면 타이밍이 어긋남)
+    const synced = res.filter(x => x.syncedLyrics && gap(x) < 5).sort((a, b) => gap(a) - gap(b))[0];
+    if (synced) return { synced: synced.syncedLyrics };
+    // 일반 가사도 길이가 크게 다르면 다른 곡 (자유 검색은 엉뚱한 곡도 섞여 나옴)
+    plain ??= res.find(x => x.plainLyrics && gap(x) < 15)?.plainLyrics;
+  }
+  return plain && { plain };
+}
+
 async function loadLyrics(t) {
   lyr = { lines: [], idx: -1 };
   lyricsBox.classList.remove('plain');
   lyricsBox.textContent = '가사 찾는 중…';
   try {
-    // ponytail: 제목 그대로 검색. "- Remastered" 같은 꼬리표 때문에 못 찾으면 정리 로직 추가
-    const r = await fetch('https://lrclib.net/api/search?' + new URLSearchParams({ track_name: t.name, artist_name: t.artists[0]?.name ?? '' }));
-    const res = await r.json();
+    const { synced, plain } = await findLyrics(t) ?? {};
     if (t.uri !== st.uri) return;  // 그사이 곡이 바뀜
-    const gap = x => Math.abs(x.duration - t.duration_ms / 1000);
-    // 싱크 가사는 길이가 거의 같은 버전만 (다른 버전이면 타이밍이 어긋남), 없으면 일반 가사
-    const synced = res.filter(x => x.syncedLyrics && gap(x) < 5).sort((a, b) => gap(a) - gap(b))[0];
-    const plain = res.find(x => x.plainLyrics);
     if (synced) {
-      lyr.lines = parseLrc(synced.syncedLyrics);
+      lyr.lines = parseLrc(synced);
       lyricsBox.replaceChildren(...lyr.lines.map(l => {
         const p = document.createElement('p');
         p.textContent = l.text || '♪';
@@ -283,7 +300,7 @@ async function loadLyrics(t) {
       }));
     } else if (plain) {
       lyricsBox.classList.add('plain');
-      lyricsBox.replaceChildren(...plain.plainLyrics.split('\n').map(text => Object.assign(document.createElement('p'), { textContent: text })));
+      lyricsBox.replaceChildren(...plain.split('\n').map(text => Object.assign(document.createElement('p'), { textContent: text })));
     } else lyricsBox.textContent = '가사를 찾지 못했어요';
   } catch (e) { lyricsBox.textContent = '가사를 불러오지 못했어요'; console.warn(e); }
 }
