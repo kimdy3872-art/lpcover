@@ -54,7 +54,8 @@
   #devList button:focus-visible { outline: 2px solid #1ed760; }
   #devList button[aria-current="true"] { background: #1ed76033; }
   #devList small { opacity: .6; }
-  #ctrl button { width: min(56px, 12vw); height: min(56px, 12vw); border: 0; border-radius: 50%; background: #fff1; color: #fff; font-size: 1.3rem; cursor: pointer; }
+  #ctrl button { display: grid; place-items: center; padding: 0; width: min(56px, 12vw); height: min(56px, 12vw); border: 0; border-radius: 50%; background: #fff1; color: #fff; cursor: pointer; }
+  #ctrl svg { width: 24px; height: 24px; fill: currentColor; }
   #ctrl button:hover { background: #fff3; }
   #progress { display: flex; align-items: center; gap: 12px; width: min(calc(var(--s) * 1.4), 90vw);
               font: 12px system-ui; font-variant-numeric: tabular-nums; color: #fffa; }
@@ -114,12 +115,13 @@
   <span id="left">-0:00</span>
 </div>
 <div id="ctrl">
-  <button id="prev" aria-label="이전 곡">&#x23EE;&#xFE0E;</button>
-  <button id="play" aria-label="재생/일시정지">&#x25B6;&#xFE0E;</button>
-  <button id="next" aria-label="다음 곡">&#x23ED;&#xFE0E;</button>
-  <button id="crate" aria-label="검색·플레이리스트">&#x2630;</button>
-  <button id="lyBtn" aria-label="가사 보기" aria-pressed="false">&#x266A;&#xFE0E;</button>
-  <button id="devBtn" aria-label="재생 기기 선택"><svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3A4.5 4.5 0 0 0 14 8v8a4.5 4.5 0 0 0 2.5-4z"/></svg></button>
+  <!-- 글자 기호는 글꼴마다 기준선이 달라 원 안에서 밀린다 → 24px 격자에 맞춘 SVG(Material Icons) -->
+  <button id="prev" aria-label="이전 곡"><svg viewBox="0 0 24 24"><path d="M6 6h2v12H6zm3.5 6 8.5 6V6z"/></svg></button>
+  <button id="play" aria-label="재생/일시정지"><svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></button>
+  <button id="next" aria-label="다음 곡"><svg viewBox="0 0 24 24"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg></button>
+  <button id="crate" aria-label="검색·플레이리스트"><svg viewBox="0 0 24 24"><path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z"/></svg></button>
+  <button id="lyBtn" aria-label="가사 보기" aria-pressed="false"><svg viewBox="0 0 24 24"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg></button>
+  <button id="devBtn" aria-label="재생 기기 선택"><svg viewBox="0 0 24 24"><path d="M18.5 12c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM5 9v6h4l5 5V4L9 9H5z"/></svg></button>
 </div>
 <div id="lyrics">재생 중인 곡이 없어요</div>
 
@@ -206,7 +208,8 @@ function apply(t, playing, progress) {
   if (t) Object.assign(st, { progress, duration: t.duration_ms, at: performance.now() });
 }
 
-function setPlaying(v) { st.playing = v; $('play').innerHTML = v ? '&#x275A;&#x275A;' : '&#x25B6;&#xFE0E;'; }
+const PLAY = 'M8 5v14l11-7z', PAUSE = 'M6 19h4V5H6v14zm8-14v14h4V5h-4z';
+function setPlaying(v) { st.playing = v; $('play').querySelector('path').setAttribute('d', v ? PAUSE : PLAY); }
 
 // 조작은 Web API로: SDK 기기든 폰·데스크톱 앱이든 지금 활성 기기에 적용됨
 const act = (path, method, body) => api('/me/player' + path, method, body).then(() => setTimeout(refresh, 500)).catch(console.warn);
